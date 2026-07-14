@@ -74,47 +74,42 @@ namespace PrivacyAnalytics.Infrastructure.Migrations
                 column: "organization_id");
 
             migrationBuilder.Sql("""
-                -- Convert analytics_events to TimescaleDB hypertable
+                -- Convert analytics_events to a TimescaleDB hypertable partitioned on timestamp.
                 SELECT create_hypertable('analytics_events', 'timestamp',
                     if_not_exists => TRUE,
                     migrate_data => TRUE);
 
-                -- Tenant context functions (fail-closed: NULL -> zero rows)
-                CREATE OR REPLACE FUNCTION set_tenant(tenant_id uuid) RETURNS void AS $$
-                BEGIN
-                    PERFORM set_config('app.current_tenant_id', tenant_id::text, false);
-                END;
-                $$ LANGUAGE plpgsql SECURITY DEFINER;
-
-                CREATE OR REPLACE FUNCTION get_tenant() RETURNS uuid AS $$
-                BEGIN
-                    RETURN NULLIF(current_setting('app.current_tenant_id', true), '')::uuid;
-                END;
-                $$ LANGUAGE plpgsql STABLE;
-
-                -- Enable RLS on analytics_events
+                -- Enable Row-Level Security on analytics_events and FORCE it so that even
+                -- the table owner is subject to the policy (no silent owner bypass).
                 ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
                 ALTER TABLE analytics_events FORCE ROW LEVEL SECURITY;
 
+                -- Fail-closed tenant isolation. current_setting('app.current_tenant_id', true)
+                -- returns NULL when the session variable was never set, and '' after a RESET (the
+                -- default for placeholder GUCs). NULLIF collapses the empty-string case to NULL too,
+                -- so the cast never raises. NULL::uuid is NULL, therefore
+                -- `organization_id = NULL` evaluates to NULL (not TRUE) and zero rows are returned.
+                -- A missing tenant context yields an empty result set, never an error that could be
+                -- swallowed upstream.
                 CREATE POLICY tenant_isolation_select ON analytics_events
                     FOR SELECT
-                    USING (organization_id = get_tenant());
+                    USING (organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
 
                 CREATE POLICY tenant_isolation_insert ON analytics_events
                     FOR INSERT
-                    WITH CHECK (organization_id = get_tenant());
+                    WITH CHECK (organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
 
-                -- Enable RLS on erasure_audit_log
+                -- Apply the same fail-closed isolation to the insert-only erasure audit log.
                 ALTER TABLE erasure_audit_log ENABLE ROW LEVEL SECURITY;
                 ALTER TABLE erasure_audit_log FORCE ROW LEVEL SECURITY;
 
                 CREATE POLICY tenant_isolation_select ON erasure_audit_log
                     FOR SELECT
-                    USING (organization_id = get_tenant());
+                    USING (organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
 
                 CREATE POLICY tenant_isolation_insert ON erasure_audit_log
                     FOR INSERT
-                    WITH CHECK (organization_id = get_tenant());
+                    WITH CHECK (organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
                 """);
         }
 
@@ -129,9 +124,6 @@ namespace PrivacyAnalytics.Infrastructure.Migrations
                 DROP POLICY IF EXISTS tenant_isolation_select ON analytics_events;
                 DROP POLICY IF EXISTS tenant_isolation_insert ON analytics_events;
                 ALTER TABLE analytics_events DISABLE ROW LEVEL SECURITY;
-
-                DROP FUNCTION IF EXISTS get_tenant();
-                DROP FUNCTION IF EXISTS set_tenant(uuid);
                 """);
 
             migrationBuilder.DropTable(

@@ -6,4 +6,7 @@
     <Project Path="src/PrivacyAnalytics.Infrastructure/PrivacyAnalytics.Infrastructure.csproj" />
     <Project Path="src/PrivacyAnalytics.Worker/PrivacyAnalytics.Worker.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PrivacyAnalytics.IntegrationTests/PrivacyAnalytics.IntegrationTests.csproj" />
+  </Folder>
 </Solution>
