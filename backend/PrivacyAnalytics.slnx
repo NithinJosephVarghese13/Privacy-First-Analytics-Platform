@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PrivacyAnalytics.Api/PrivacyAnalytics.Api.csproj" />
+    <Project Path="src/PrivacyAnalytics.Contracts/PrivacyAnalytics.Contracts.csproj" />
+    <Project Path="src/PrivacyAnalytics.Domain/PrivacyAnalytics.Domain.csproj" />
+    <Project Path="src/PrivacyAnalytics.Infrastructure/PrivacyAnalytics.Infrastructure.csproj" />
+    <Project Path="src/PrivacyAnalytics.Worker/PrivacyAnalytics.Worker.csproj" />
+  </Folder>
+</Solution>
