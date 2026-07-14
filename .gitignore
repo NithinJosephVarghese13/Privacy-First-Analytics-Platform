@@ -1,0 +1,16 @@
+# React
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# .NET
+**/bin/
+**/obj/
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+
+# Logs
+*.log
