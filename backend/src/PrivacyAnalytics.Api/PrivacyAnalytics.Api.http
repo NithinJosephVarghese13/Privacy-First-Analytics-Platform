@@ -1,6 +1,8 @@
 @PrivacyAnalytics.Api_HostAddress = http://localhost:5115
 
-### Track endpoint — happy path (query string is stripped by middleware before the handler logs it).
+### Track endpoint — Tier 1 (anonymous): no X-User-Id → SHA-256(IP + UA + DailySalt) is
+### computed and DurableHash is null. AnonymousDailyHash is forced null whenever IsAuthenticated
+### is true, so this branch is the only one that populates it.
 POST {{PrivacyAnalytics.Api_HostAddress}}/api/v1/track
 X-Tenant-Origin: acme.example.com
 Content-Type: application/json
@@ -8,6 +10,36 @@ Content-Type: application/json
 {
   "url": "https://shop.example.com/products/widget?email=user@example.com&ref=affiliate123",
   "referralSource": "https://google.com/search?q=widgets",
+  "eventType": "pageview"
+}
+
+### Track endpoint — Tier 2 (authenticated, opted in): X-User-Id present + X-User-Opted-In: true
+### → tenant-scoped DurableHash is computed. Note AnonymousDailyHash is logged <null> even though
+### the IP/UA are available: this is the FR-2.1 forced-null rule preventing double-counting between
+### tiers. X-Tenant-Id scopes the HMAC so the same user in two tenants hashes differently.
+POST {{PrivacyAnalytics.Api_HostAddress}}/api/v1/track
+X-Tenant-Origin: acme.example.com
+X-Tenant-Id: 00000000-0000-0000-0000-000000000001
+X-User-Id: auth0|user-42
+X-User-Opted-In: true
+Content-Type: application/json
+
+{
+  "url": "https://shop.example.com/products/widget",
+  "eventType": "pageview"
+}
+
+### Track endpoint — authenticated but NOT opted in: no identifier is stored at all
+### (AnonymousDailyHash = null AND DurableHash = null). Correct privacy posture.
+POST {{PrivacyAnalytics.Api_HostAddress}}/api/v1/track
+X-Tenant-Origin: acme.example.com
+X-Tenant-Id: 00000000-0000-0000-0000-000000000001
+X-User-Id: auth0|user-42
+X-User-Opted-In: false
+Content-Type: application/json
+
+{
+  "url": "https://shop.example.com/products/widget",
   "eventType": "pageview"
 }
 

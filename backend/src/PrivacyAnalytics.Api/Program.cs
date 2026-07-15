@@ -2,13 +2,21 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using PrivacyAnalytics.Api.Middleware;
 using PrivacyAnalytics.Contracts;
+using PrivacyAnalytics.Domain.Identity;
 using PrivacyAnalytics.Infrastructure.Data;
+using PrivacyAnalytics.Infrastructure.Identity;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AnalyticsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("AnalyticsDb")));
+
+// Two-tier identity hashing (FR-2.1): daily-salt SHA-256 for anonymous traffic and a
+// tenant-scoped HMAC for authenticated, opted-in traffic. The HMAC signing key is read from a
+// Docker secret file — never appsettings, never an env var holding the literal value, never a DB
+// column (see docker-compose.yml for the secret mount).
+builder.Services.AddIdentityHashing(builder.Configuration);
 
 builder.Services.AddLogging();
 
@@ -55,19 +63,75 @@ var app = builder.Build();
 app.UseMiddleware<UrlScrubbingMiddleware>();
 app.UseRateLimiter();
 
-app.MapPost("/api/v1/track", (TrackRequest payload, ILogger<Program> logger) =>
+app.MapPost("/api/v1/track", (
+        TrackRequest payload,
+        HttpContext httpContext,
+        IIdentityHashService identityHashService,
+        ILogger<Program> logger) =>
     {
-        // MVP: log the (already-scrubbed) payload and return 202 immediately. No hashing, no
-        // RabbitMQ publish yet — that's Module 2. The payload at this point has had its query
-        // string stripped by UrlScrubbingMiddleware, so logging it does not leak query-string PII.
+        // MVP: compute the two-tier pseudonyms and return 202 immediately. No RabbitMQ publish yet
+        // (that's Module 2). The payload at this point has had its query string stripped by
+        // UrlScrubbingMiddleware, so logging it does not leak query-string PII.
+
+        // Identity context. In production these come from the VERIFIED auth token (Keycloak JWT),
+        // never from client-controllable input. For v1 they are injected as request headers by the
+        // upstream identity proxy — the same trust boundary as X-Tenant-Origin — so a spoofing actor
+        // is one that already controls the beacon client, which is the documented threat model.
+        var tenantIdHeader = httpContext.Request.Headers["X-Tenant-Id"].ToString();
+        var userIdHeader = httpContext.Request.Headers["X-User-Id"].ToString();
+        var optedIn = httpContext.Request.Headers["X-User-Opted-In"].ToString()
+            .Equals("true", StringComparison.OrdinalIgnoreCase);
+
+        // OrganizationId is required to tenant-scope the durable hash; absent → we cannot mint a
+        // tenant-scoped pseudonym, so DurableHash falls back to null (no durable tracking).
+        Guid.TryParse(tenantIdHeader, out var organizationId);
+
+        var isAuthenticated = !string.IsNullOrWhiteSpace(userIdHeader);
+        var clientIp = ResolveClientIp(httpContext.Request);
+        var userAgent = httpContext.Request.Headers.UserAgent.ToString();
+
+        var utcDate = DateOnly.FromDateTime(DateTimeOffset.UtcNow.DateTime);
+        var identityInput = new IdentityHashInput(
+            organizationId,
+            isAuthenticated,
+            optedIn,
+            UserId: isAuthenticated ? userIdHeader : null,
+            ClientIp: clientIp,
+            UserAgent: string.IsNullOrWhiteSpace(userAgent) ? null : userAgent);
+
+        var hashes = identityHashService.Compute(identityInput, utcDate);
+
         logger.LogInformation(
-            "AnalyticsEventReceived (unprocessed): Url='{Url}', ReferralSource='{ReferralSource}', EventType='{EventType}'",
+            "AnalyticsEventReceived: Url='{Url}', EventType='{EventType}', IsAuthenticated={IsAuth}, " +
+            "OptedIn={OptedIn}, AnonymousDailyHash='{AnonymousHash}' (forced null when authenticated), " +
+            "DurableHash='{DurableHash}'",
             payload.Url ?? "<null>",
-            payload.ReferralSource ?? "<null>",
-            payload.EventType ?? "<null>");
+            payload.EventType ?? "<null>",
+            isAuthenticated,
+            optedIn,
+            hashes.AnonymousDailyHash ?? "<null>",
+            hashes.DurableHash ?? "<null>");
 
         return Results.Accepted();
     })
     .RequireRateLimiting("TenantOrigin");
+
+// Extracts the client IP preferring the first hop of X-Forwarded-For (set by the trusted edge
+// proxy) and falling back to the direct remote IP. Only the first forwarded hop is trusted; a
+// production deployment should pin this to a known proxy and validate the header chain.
+static string? ResolveClientIp(HttpRequest request)
+{
+    var forwarded = request.Headers["X-Forwarded-For"].ToString();
+    if (!string.IsNullOrWhiteSpace(forwarded))
+    {
+        var first = forwarded.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(first))
+        {
+            return first;
+        }
+    }
+    return request.HttpContext.Connection.RemoteIpAddress?.ToString();
+}
 
 app.Run();

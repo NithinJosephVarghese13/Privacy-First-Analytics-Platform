@@ -1,0 +1,27 @@
+# Multi-stage build for the PrivacyAnalytics API. Keeps the runtime image lean and ensures the
+# Docker secret files are NEVER baked into the image — they are mounted at runtime (see the
+# `secrets:` block in docker-compose.yml), so the same image works across environments and a leaked
+# image contains no signing key material.
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+# Copy the whole backend solution so the project graph and slnx resolve cleanly.
+COPY backend/ ./
+
+# Restore, build and publish the API project. Trim unused assemblies for a smaller image.
+RUN dotnet restore PrivacyAnalytics.slnx \
+    && dotnet publish src/PrivacyAnalytics.Api/PrivacyAnalytics.Api.csproj \
+        -c Release \
+        -o /app/publish \
+        /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+COPY --from=build /app/publish ./
+
+# Docker mounts each declared secret as a regular file under /run/secrets/<name>. The app reads the
+# durable-HMAC signing key and the daily-salt seed from there (IdentityOptions.SecretsPath defaults
+# to /run/secrets). No key material is set via environment variables.
+EXPOSE 8080
+
+ENTRYPOINT ["dotnet", "PrivacyAnalytics.Api.dll"]

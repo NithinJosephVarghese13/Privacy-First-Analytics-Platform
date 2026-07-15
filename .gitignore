@@ -16,3 +16,8 @@ frontend/.env
 *.log
 
 .env
+
+# Docker secrets for identity hashing (FR-2.1). The signing key and daily-salt seed must NEVER be
+# committed — they are generated per-environment by docker/secrets/generate-secrets.sh.
+docker/secrets/analytics_daily_salt_seed
+docker/secrets/analytics_durable_hmac_key

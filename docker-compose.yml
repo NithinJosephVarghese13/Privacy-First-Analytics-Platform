@@ -58,11 +58,42 @@ services:
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000; printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3; grep -q 'UP' <&3 || { exec 3>&-; exit 1; }; exec 3>&-"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost:9000; printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3; grep -q 'UP' <&3 || { exec 3>&-; exit 1; }; exec 3>&-"]
       interval: 10s
       timeout: 10s
       retries: 8
       start_period: 30s
+    restart: unless-stopped
+
+  # PrivacyAnalytics API. The durable-HMAC signing key and daily-salt seed are injected as Docker
+  # SECRETS (file mounts under /run/secrets), not as environment variables and never as a DB
+  # column (FR-2.1). Keeping the key out-of-band means a database compromise alone cannot
+  # re-identify authenticated users.
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: analytics-api
+    depends_on:
+      postgres-timescale:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Connection-string only — NO secret material here. The signing key comes from the secret
+      # mount below; putting it in an env var would defeat the out-of-band guarantee.
+      ConnectionStrings__AnalyticsDb: "Host=postgres-timescale;Port=5432;Database=analytics;Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      Identity__SecretsPath: "/run/secrets"
+      Identity__AllowUnmanagedDevSecrets: "false"
+    ports:
+      - "5115:8080"
+    secrets:
+      # Docker mounts each named secret as a regular file at /run/secrets/<name>. The app reads
+      # the bytes at startup via DockerSecretReader. Generate these files first:
+      #   ./docker/secrets/generate-secrets.sh
+      - analytics_daily_salt_seed
+      - analytics_durable_hmac_key
     restart: unless-stopped
 
 volumes:
@@ -70,3 +101,13 @@ volumes:
     name: analytics_pgdata
   rabbitmq_data:
     name: analytics_rabbitmq_data
+
+# Named Docker secrets. `file:` points at a host path; compose mounts the file content read-only
+# into each service that declares it under `secrets:`. The files themselves are gitignored (see
+# .gitignore) and produced by docker/secrets/generate-secrets.sh. In a hosted deployment replace
+# `file:` with an external/managed secret of the same name.
+secrets:
+  analytics_daily_salt_seed:
+    file: ./docker/secrets/analytics_daily_salt_seed
+  analytics_durable_hmac_key:
+    file: ./docker/secrets/analytics_durable_hmac_key
