@@ -1,6 +1,16 @@
 @PrivacyAnalytics.Api_HostAddress = http://localhost:5115
 
-GET {{PrivacyAnalytics.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### Track endpoint — happy path (query string is stripped by middleware before the handler logs it).
+POST {{PrivacyAnalytics.Api_HostAddress}}/api/v1/track
+X-Tenant-Origin: acme.example.com
+Content-Type: application/json
 
+{
+  "url": "https://shop.example.com/products/widget?email=user@example.com&ref=affiliate123",
+  "referralSource": "https://google.com/search?q=widgets",
+  "eventType": "pageview"
+}
+
+### Track endpoint — same tenant, expected to 429 once >100 req/sec arrive.
+### Send 105 rapid requests; the last ~5 should return 429 Too Many Requests.
 ###
