@@ -5,6 +5,8 @@ using PrivacyAnalytics.Contracts;
 using PrivacyAnalytics.Domain.Identity;
 using PrivacyAnalytics.Infrastructure.Data;
 using PrivacyAnalytics.Infrastructure.Identity;
+using PrivacyAnalytics.Infrastructure.Messaging;
+using PrivacyAnalytics.Domain.Messaging;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,6 +19,7 @@ builder.Services.AddDbContext<AnalyticsDbContext>(options =>
 // Docker secret file — never appsettings, never an env var holding the literal value, never a DB
 // column (see docker-compose.yml for the secret mount).
 builder.Services.AddIdentityHashing(builder.Configuration);
+builder.Services.AddMessaging();
 
 builder.Services.AddLogging();
 
@@ -63,10 +66,11 @@ var app = builder.Build();
 app.UseMiddleware<UrlScrubbingMiddleware>();
 app.UseRateLimiter();
 
-app.MapPost("/api/v1/track", (
+app.MapPost("/api/v1/track", async (
         TrackRequest payload,
         HttpContext httpContext,
         IIdentityHashService identityHashService,
+        IMessagePublisher publisher,
         ILogger<Program> logger) =>
     {
         // MVP: compute the two-tier pseudonyms and return 202 immediately. No RabbitMQ publish yet
@@ -111,6 +115,18 @@ app.MapPost("/api/v1/track", (
             optedIn,
             hashes.AnonymousDailyHash ?? "<null>",
             hashes.DurableHash ?? "<null>");
+
+        var eventMessage = new AnalyticsEventReceived
+        {
+            OrganizationId = organizationId,
+            AnonymousDailyHash = hashes.AnonymousDailyHash,
+            DurableHash = hashes.DurableHash,
+            IsAuthenticated = isAuthenticated,
+            EventType = payload.EventType ?? string.Empty,
+            Path = payload.Url ?? string.Empty
+        };
+
+        await publisher.PublishAsync(eventMessage);
 
         return Results.Accepted();
     })
