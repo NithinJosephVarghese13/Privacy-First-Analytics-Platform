@@ -18,6 +18,7 @@ namespace PrivacyAnalytics.IntegrationTests.Rls;
 /// also checks the relrowsecurity/relforcerowsecurity flags and table ownership up front so a future
 /// regression (e.g. reverting to a non-owner role, for which FORCE is a no-op) fails fast with a clear message.
 /// </remarks>
+[Collection("RlsTests")]
 public sealed class RlsTenantIsolationTests
 {
     private const string TestDbName = "analytics_rls_test";

@@ -29,7 +29,7 @@ public class DapperQueryHelper(
         
         await connection.ExecuteAsync(
             new CommandDefinition(
-                "SET LOCAL app.current_tenant_id = @TenantId;",
+                "SELECT set_config('app.current_tenant_id', @TenantId::text, true);",
                 new { currentTenant.TenantId },
                 transaction,
                 cancellationToken: cancellationToken));
@@ -56,7 +56,7 @@ public class DapperQueryHelper(
         
         await connection.ExecuteAsync(
             new CommandDefinition(
-                "SET LOCAL app.current_tenant_id = @TenantId;",
+                "SELECT set_config('app.current_tenant_id', @TenantId::text, true);",
                 new { currentTenant.TenantId },
                 transaction,
                 cancellationToken: cancellationToken));

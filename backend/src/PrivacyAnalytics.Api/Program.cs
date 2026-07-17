@@ -40,6 +40,7 @@ builder.Services.AddDbContext<AnalyticsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("AnalyticsDb")));
 
 builder.Services.AddScoped<IDapperQueryHelper, DapperQueryHelper>();
+builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(PrivacyAnalytics.Infrastructure.Analytics.Queries.GetPageviewsOverTimeQueryHandler).Assembly));
 
 // Two-tier identity hashing (FR-2.1): daily-salt SHA-256 for anonymous traffic and a
 // tenant-scoped HMAC for authenticated, opted-in traffic. The HMAC signing key is read from a
