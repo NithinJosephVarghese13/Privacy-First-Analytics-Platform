@@ -8,8 +8,33 @@ using PrivacyAnalytics.Infrastructure.Identity;
 using PrivacyAnalytics.Infrastructure.Messaging;
 using PrivacyAnalytics.Domain.Messaging;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using PrivacyAnalytics.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Disable default inbound claim mapping so custom claims like "tenant_id" remain intact
+JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        var authority = builder.Configuration["Authentication:Authority"] ?? "http://localhost:8080/realms/analytics-platform";
+        options.Authority = authority;
+        options.RequireHttpsMetadata = false; // Internal Docker / local dev network
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateAudience = false, // Not validating audience for internal tokens in this MVP
+            ValidateIssuer = true,
+            ValidIssuer = authority
+        };
+    });
+builder.Services.AddAuthorization();
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
 
 builder.Services.AddDbContext<AnalyticsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("AnalyticsDb")));
@@ -65,6 +90,9 @@ var app = builder.Build();
 // unconditional regardless of throttling decisions.
 app.UseMiddleware<UrlScrubbingMiddleware>();
 app.UseRateLimiter();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapPost("/api/v1/track", async (
         TrackRequest payload,
