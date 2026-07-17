@@ -54,9 +54,11 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       KC_HEALTH_ENABLED: "true"
-    command: start-dev
+    command: start-dev --import-realm
     ports:
       - "8080:8080"
+    volumes:
+      - ./docker/keycloak/analytics-realm-export.json:/opt/keycloak/data/import/analytics-realm-export.json
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost:9000; printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3; grep -q 'UP' <&3 || { exec 3>&-; exit 1; }; exec 3>&-"]
       interval: 10s
