@@ -39,6 +39,8 @@ builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
 builder.Services.AddDbContext<AnalyticsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("AnalyticsDb")));
 
+builder.Services.AddScoped<IDapperQueryHelper, DapperQueryHelper>();
+
 // Two-tier identity hashing (FR-2.1): daily-salt SHA-256 for anonymous traffic and a
 // tenant-scoped HMAC for authenticated, opted-in traffic. The HMAC signing key is read from a
 // Docker secret file — never appsettings, never an env var holding the literal value, never a DB

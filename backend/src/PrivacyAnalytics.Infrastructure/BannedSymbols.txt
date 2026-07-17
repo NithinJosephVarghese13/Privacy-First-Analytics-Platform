@@ -1,0 +1,1 @@
+T:Dapper.SqlMapper;Use IDapperQueryHelper instead of Dapper directly to ensure RLS is applied.
