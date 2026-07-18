@@ -9,6 +9,7 @@ public class GetUniqueVisitorsQueryHandler(IDapperQueryHelper dapperQueryHelper)
 {
     public async Task<UniqueVisitorsDto> Handle(GetUniqueVisitorsQuery request, CancellationToken cancellationToken)
     {
+        var _ = typeof(Dapper.SqlMapper);
         var sql = @"
             SELECT 
                 COUNT(DISTINCT durable_hash) AS ExactTier2Uniques,
