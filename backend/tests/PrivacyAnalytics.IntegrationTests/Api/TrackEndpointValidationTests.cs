@@ -108,4 +108,61 @@ public class TrackEndpointValidationTests : IAsyncLifetime
         // Assert
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
     }
+
+    [PostgresRequiredFact]
+    public async Task TrackEndpoint_RateLimiter_PartitionsByTenantId()
+    {
+        // Arrange
+        var tenantA_OrgId = Guid.NewGuid();
+        var tenantA_WriteKey = Guid.NewGuid();
+        
+        var tenantB_OrgId = Guid.NewGuid();
+        var tenantB_WriteKey = Guid.NewGuid();
+
+        await using (var adminConn = new NpgsqlConnection(_harness.AdminConnectionString))
+        {
+            await adminConn.OpenAsync();
+            await adminConn.ExecuteAsync(
+                "INSERT INTO organizations (org_id, name, public_write_key) VALUES (@Id1, 'Tenant A', @Key1), (@Id2, 'Tenant B', @Key2)",
+                new { Id1 = tenantA_OrgId, Key1 = tenantA_WriteKey, Id2 = tenantB_OrgId, Key2 = tenantB_WriteKey });
+        }
+
+        var request = new TrackRequest { Url = "https://example.com", EventType = "pageview" };
+        var jsonContent = JsonContent.Create(request);
+
+        // Act 1: Fire 300 requests for Tenant A, alternating between two DIFFERENT origins.
+        var tasksA = new List<Task<HttpResponseMessage>>();
+        for (int i = 0; i < 300; i++)
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, "/api/v1/track") { Content = JsonContent.Create(request) };
+            req.Headers.Add("X-Tenant-Id", tenantA_WriteKey.ToString());
+            req.Headers.Add("X-Tenant-Origin", i % 2 == 0 ? "origin1.com" : "origin2.com"); 
+            tasksA.Add(_client.SendAsync(req));
+        }
+        
+        var responsesA = await Task.WhenAll(tasksA);
+        var acceptedA = responsesA.Count(r => r.StatusCode == HttpStatusCode.Accepted);
+
+        // Assert 1: Proves partitioning by TenantId. If partitioned by Origin, each origin gets
+        // its own 100 bucket, yielding 200+ accepted. Because they share a TenantId bucket,
+        // it caps at 100 (or slightly more if a replenish tick happens, but strictly < 180).
+        Assert.True(acceptedA < 180, $"Expected shared Tenant bucket to cap < 180, got {acceptedA}");
+        Assert.True(acceptedA >= 90, $"Expected some requests to succeed, got {acceptedA}");
+
+        // Act 2: Fire requests for Tenant B. Proves isolation by TenantId.
+        var tasksB = new List<Task<HttpResponseMessage>>();
+        for (int i = 0; i < 50; i++)
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, "/api/v1/track") { Content = JsonContent.Create(request) };
+            req.Headers.Add("X-Tenant-Id", tenantB_WriteKey.ToString());
+            req.Headers.Add("X-Tenant-Origin", "origin1.com");
+            tasksB.Add(_client.SendAsync(req));
+        }
+
+        var responsesB = await Task.WhenAll(tasksB);
+        var acceptedB = responsesB.Count(r => r.StatusCode == HttpStatusCode.Accepted);
+        
+        // Assert 2: Tenant B gets its own fresh bucket despite Tenant A being exhausted.
+        Assert.Equal(50, acceptedB);
+    }
 }

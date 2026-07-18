@@ -51,28 +51,29 @@ builder.Services.AddMessaging();
 
 builder.Services.AddLogging();
 
-// Rate limiting: per-tenant-origin token bucket, 100 req/sec per partition. The tenant origin is
-// taken from the `X-Tenant-Origin` request header (chosen over subdomain extraction so the partition
-// key is explicit, spoofable only by an actor that already controls the client — which is the
-// threat model for a beacon endpoint — and independent of DNS/TLS configuration). A missing header
-// collapses to a single "unknown" partition so unidentified traffic cannot trivially bypass the
-// limiter by omitting the header; that shared bucket is a deliberate choke-point, not a per-tenant
-// budget. Each named partition gets its own TokenBucketRateLimiter with a 100-token capacity that
-// replenishes 100 tokens every second, i.e. a sustained 100 req/sec ceiling per tenant origin.
+// Rate limiting: per-tenant token bucket, 100 req/sec per partition. The tenant identity is
+// taken from the `X-Tenant-Id` request header (the public write key). Because this is a public
+// beacon endpoint, the write key is visible in client-side code, meaning it is still spoofable
+// by an actor that inspects the client or network traffic. This does not change the threat model:
+// the partition key is explicit and spoofable only by an actor that already has access to the client.
+// A missing or invalid header collapses to a single "unknown" partition so unidentified traffic
+// cannot trivially bypass the limiter by omitting the header; that shared bucket is a deliberate
+// choke-point, not a per-tenant budget. Each named partition gets its own TokenBucketRateLimiter
+// with a 100-token capacity that replenishes 100 tokens every second.
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
     options.AddPolicy("TenantOrigin", context =>
     {
-        var tenantOrigin = context.Request.Headers["X-Tenant-Origin"].ToString();
-        if (string.IsNullOrWhiteSpace(tenantOrigin))
+        var tenantId = context.Request.Headers["X-Tenant-Id"].ToString();
+        if (string.IsNullOrWhiteSpace(tenantId))
         {
-            tenantOrigin = "unknown";
+            tenantId = "unknown";
         }
 
         return RateLimitPartition.GetTokenBucketLimiter(
-            tenantOrigin,
+            tenantId,
             _ => new TokenBucketRateLimiterOptions
             {
                 TokenLimit = 100,

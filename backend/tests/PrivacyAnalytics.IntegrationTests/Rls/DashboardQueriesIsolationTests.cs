@@ -113,7 +113,7 @@ public class DashboardQueriesIsolationTests
         await admin.OpenAsync();
 
         await admin.ExecuteAsync(
-            "INSERT INTO organizations (org_id, name) VALUES (@Id, @Name) ON CONFLICT (org_id) DO NOTHING;",
+            "INSERT INTO organizations (org_id, name, public_write_key) VALUES (@Id, @Name, @Id) ON CONFLICT (org_id) DO NOTHING;",
             new[]
             {
                 new { Id = tenantA, Name = "Tenant A" },

@@ -130,21 +130,31 @@ internal sealed class TestDatabaseHarness : IAsyncDisposable
             quotedDb);
     }
 
+    private static readonly SemaphoreSlim _roleSemaphore = new SemaphoreSlim(1, 1);
+
     private static async Task EnsureAppRoleAsync(string maintenanceConnectionString)
     {
-        await using var m = new NpgsqlConnection(maintenanceConnectionString);
-        await m.OpenAsync();
-        await m.ExecuteAsync($$"""
-            DO $$
-            BEGIN
-                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{{AppRole}}') THEN
-                    CREATE ROLE {{QuoteIdent(AppRole)}} LOGIN PASSWORD '{{AppRolePassword}}' NOSUPERUSER NOBYPASSRLS;
-                END IF;
-            END
-            $$;
-            """);
-        await m.ExecuteAsync(
-            $"ALTER ROLE {QuoteIdent(AppRole)} LOGIN PASSWORD '{AppRolePassword}' NOSUPERUSER NOBYPASSRLS;");
+        await _roleSemaphore.WaitAsync();
+        try
+        {
+            await using var m = new NpgsqlConnection(maintenanceConnectionString);
+            await m.OpenAsync();
+            await m.ExecuteAsync($$"""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{{AppRole}}') THEN
+                        CREATE ROLE {{QuoteIdent(AppRole)}} LOGIN PASSWORD '{{AppRolePassword}}' NOSUPERUSER NOBYPASSRLS;
+                    END IF;
+                END
+                $$;
+                """);
+            await m.ExecuteAsync(
+                $"ALTER ROLE {QuoteIdent(AppRole)} LOGIN PASSWORD '{AppRolePassword}' NOSUPERUSER NOBYPASSRLS;");
+        }
+        finally
+        {
+            _roleSemaphore.Release();
+        }
     }
 
     private static async Task DropDatabaseAsync(NpgsqlConnection m, string dbName, string quotedDb)
