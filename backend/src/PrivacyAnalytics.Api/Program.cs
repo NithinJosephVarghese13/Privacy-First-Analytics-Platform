@@ -102,6 +102,7 @@ app.MapPost("/api/v1/track", async (
         HttpContext httpContext,
         IIdentityHashService identityHashService,
         IMessagePublisher publisher,
+        IConfiguration configuration,
         ILogger<Program> logger) =>
     {
         // MVP: compute the two-tier pseudonyms and return 202 immediately. No RabbitMQ publish yet
@@ -112,14 +113,30 @@ app.MapPost("/api/v1/track", async (
         // never from client-controllable input. For v1 they are injected as request headers by the
         // upstream identity proxy — the same trust boundary as X-Tenant-Origin — so a spoofing actor
         // is one that already controls the beacon client, which is the documented threat model.
+        // We now treat the X-Tenant-Id header as the PublicWriteKey for the client ingestion.
         var tenantIdHeader = httpContext.Request.Headers["X-Tenant-Id"].ToString();
         var userIdHeader = httpContext.Request.Headers["X-User-Id"].ToString();
         var optedIn = httpContext.Request.Headers["X-User-Opted-In"].ToString()
             .Equals("true", StringComparison.OrdinalIgnoreCase);
 
-        // OrganizationId is required to tenant-scope the durable hash; absent → we cannot mint a
-        // tenant-scoped pseudonym, so DurableHash falls back to null (no durable tracking).
-        Guid.TryParse(tenantIdHeader, out var organizationId);
+        if (!Guid.TryParse(tenantIdHeader, out var writeKey))
+        {
+            return Results.BadRequest(new { Error = "Invalid X-Tenant-Id header format. Must be a valid GUID." });
+        }
+
+        // Validate the PublicWriteKey and get the internal OrganizationId using Dapper
+        await using var connection = new Npgsql.NpgsqlConnection(configuration.GetConnectionString("AnalyticsDb"));
+        await connection.OpenAsync();
+        
+        var organizationId = await Dapper.SqlMapper.QueryFirstOrDefaultAsync<Guid?>(
+            connection,
+            "SELECT org_id FROM organizations WHERE public_write_key = @WriteKey",
+            new { WriteKey = writeKey });
+
+        if (organizationId == null)
+        {
+            return Results.BadRequest(new { Error = "Invalid X-Tenant-Id. Unknown tenant." });
+        }
 
         var isAuthenticated = !string.IsNullOrWhiteSpace(userIdHeader);
         var clientIp = ResolveClientIp(httpContext.Request);
@@ -127,7 +144,7 @@ app.MapPost("/api/v1/track", async (
 
         var utcDate = DateOnly.FromDateTime(DateTimeOffset.UtcNow.DateTime);
         var identityInput = new IdentityHashInput(
-            organizationId,
+            organizationId.Value,
             isAuthenticated,
             optedIn,
             UserId: isAuthenticated ? userIdHeader : null,
@@ -149,7 +166,7 @@ app.MapPost("/api/v1/track", async (
 
         var eventMessage = new AnalyticsEventReceived
         {
-            OrganizationId = organizationId,
+            OrganizationId = organizationId.Value,
             AnonymousDailyHash = hashes.AnonymousDailyHash,
             DurableHash = hashes.DurableHash,
             IsAuthenticated = isAuthenticated,
@@ -182,3 +199,5 @@ static string? ResolveClientIp(HttpRequest request)
 }
 
 app.Run();
+
+public partial class Program {}

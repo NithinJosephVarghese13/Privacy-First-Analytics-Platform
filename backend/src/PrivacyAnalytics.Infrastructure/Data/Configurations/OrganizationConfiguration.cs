@@ -17,5 +17,11 @@ public class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
             .HasColumnName("name")
             .IsRequired()
             .HasMaxLength(256);
+
+        builder.Property(o => o.PublicWriteKey)
+            .HasColumnName("public_write_key")
+            .IsRequired();
+
+        builder.HasIndex(o => o.PublicWriteKey).IsUnique();
     }
 }

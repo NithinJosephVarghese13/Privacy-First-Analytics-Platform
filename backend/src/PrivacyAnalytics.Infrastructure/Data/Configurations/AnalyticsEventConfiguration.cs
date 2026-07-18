@@ -39,5 +39,11 @@ public class AnalyticsEventConfiguration : IEntityTypeConfiguration<AnalyticsEve
 
         builder.HasIndex(e => e.OrganizationId).HasDatabaseName("ix_analytics_events_organization_id");
         builder.HasIndex(e => e.Timestamp).HasDatabaseName("ix_analytics_events_timestamp_desc").IsDescending();
+        
+        builder.HasOne<Organization>()
+            .WithMany()
+            .HasForeignKey(e => e.OrganizationId)
+            .OnDelete(DeleteBehavior.Cascade)
+            .HasConstraintName("fk_analytics_events_organization_id");
     }
 }
