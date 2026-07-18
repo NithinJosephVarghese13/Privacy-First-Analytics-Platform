@@ -35,11 +35,11 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsu ${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS} http://localhost:15672/api/health/checks/alarms >/dev/null"]
+      test: ["CMD-SHELL", "curl -fsu ${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS} http://127.0.0.1:15672/api/health/checks/alarms >/dev/null"]
       interval: 10s
       timeout: 10s
-      retries: 5
-      start_period: 15s
+      retries: 10
+      start_period: 30s
     restart: unless-stopped
 
   keycloak:
