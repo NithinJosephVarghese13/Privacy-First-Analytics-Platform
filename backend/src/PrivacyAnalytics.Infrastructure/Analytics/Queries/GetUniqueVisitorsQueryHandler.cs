@@ -12,7 +12,7 @@ public class GetUniqueVisitorsQueryHandler(IDapperQueryHelper dapperQueryHelper)
         var sql = @"
             SELECT 
                 COUNT(DISTINCT durable_hash) AS ExactTier2Uniques,
-                COALESCE(ROUND(hll_cardinality(hll_add_agg(hll_hash_text(anonymous_daily_hash))))::bigint, 0) AS EstimatedTier1Uniques
+                COALESCE(ROUND(hll_cardinality(hll_add_agg(hll_hash_text(anonymous_daily_hash::text))))::bigint, 0) AS EstimatedTier1Uniques
             FROM analytics_events
             WHERE timestamp >= @StartDate AND timestamp <= @EndDate";
 

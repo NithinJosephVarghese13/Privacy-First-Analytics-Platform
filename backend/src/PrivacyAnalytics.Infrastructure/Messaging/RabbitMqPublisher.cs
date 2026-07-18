@@ -61,12 +61,26 @@ public class RabbitMqPublisher : IMessagePublisher, IAsyncDisposable
                 durable: true,
                 cancellationToken: cancellationToken);
 
+            var dlxExchangeName = "analytics.events.dlx";
+            await _channel.ExchangeDeclareAsync(
+                exchange: dlxExchangeName,
+                type: ExchangeType.Direct,
+                durable: true,
+                cancellationToken: cancellationToken);
+
+            var queueArgs = new Dictionary<string, object?>
+            {
+                { "x-queue-type", "quorum" },
+                { "x-dead-letter-exchange", dlxExchangeName },
+                { "x-delivery-limit", 5 }
+            };
+
             await _channel.QueueDeclareAsync(
                 queue: QueueName,
                 durable: true,
                 exclusive: false,
                 autoDelete: false,
-                arguments: null,
+                arguments: queueArgs,
                 cancellationToken: cancellationToken);
 
             await _channel.QueueBindAsync(

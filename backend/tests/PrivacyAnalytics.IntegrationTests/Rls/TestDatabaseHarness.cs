@@ -94,6 +94,7 @@ internal sealed class TestDatabaseHarness : IAsyncDisposable
         {
             await ext.OpenAsync();
             await ext.ExecuteAsync("CREATE EXTENSION IF NOT EXISTS timescaledb;");
+            await ext.ExecuteAsync("CREATE EXTENSION IF NOT EXISTS hll;");
         }
 
         // Run migrations as the superuser so hypertable creation and RLS DDL succeed regardless of

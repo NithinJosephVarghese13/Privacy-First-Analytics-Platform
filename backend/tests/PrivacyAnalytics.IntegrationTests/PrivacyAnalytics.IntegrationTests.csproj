@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\src\PrivacyAnalytics.Domain\PrivacyAnalytics.Domain.csproj" />
     <ProjectReference Include="..\..\src\PrivacyAnalytics.Infrastructure\PrivacyAnalytics.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\PrivacyAnalytics.Api\PrivacyAnalytics.Api.csproj" />
+    <ProjectReference Include="..\..\src\PrivacyAnalytics.Worker\PrivacyAnalytics.Worker.csproj" />
   </ItemGroup>
 
 </Project>
