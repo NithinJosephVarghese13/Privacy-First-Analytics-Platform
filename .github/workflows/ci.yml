@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+        
+    - name: Start Services (TimescaleDB+hll and RabbitMQ)
+      run: |
+        docker compose up -d postgres-timescale rabbitmq
+      env:
+        POSTGRES_USER: analytics
+        POSTGRES_PASSWORD: analytics_dev
+        POSTGRES_DB: analytics
+        RABBITMQ_DEFAULT_USER: analytics
+        RABBITMQ_DEFAULT_PASS: analytics_dev
+
+    - name: Wait for Services to be Healthy
+      run: |
+        timeout 60 bash -c 'until docker inspect --format="{{json .State.Health.Status}}" analytics-postgres | grep -q "\"healthy\""; do sleep 1; done'
+        timeout 60 bash -c 'until docker inspect --format="{{json .State.Health.Status}}" analytics-rabbitmq | grep -q "\"healthy\""; do sleep 1; done'
+
+    - name: Restore dependencies
+      run: dotnet restore backend/PrivacyAnalytics.slnx
+
+    - name: Verify RS0030 (Banned Symbols) fails the build
+      run: |
+        echo "namespace PrivacyAnalytics.Infrastructure; public class BannedTest { public void Run() { var x = typeof(Dapper.SqlMapper); } }" > backend/src/PrivacyAnalytics.Infrastructure/BannedTest.cs
+        
+        if dotnet build backend/PrivacyAnalytics.slnx --no-restore -warnaserror; then
+          echo "Build succeeded but should have failed due to RS0030!"
+          exit 1
+        else
+          echo "Build correctly failed on RS0030."
+        fi
+        
+        rm backend/src/PrivacyAnalytics.Infrastructure/BannedTest.cs
+
+    - name: Build
+      run: dotnet build backend/PrivacyAnalytics.slnx --no-restore -warnaserror
+
+    - name: Run Unit Tests
+      run: dotnet test backend/PrivacyAnalytics.slnx --no-build --verbosity normal --filter "FullyQualifiedName~PrivacyAnalytics.UnitTests"
+
+    - name: Run Integration Tests
+      run: dotnet test backend/PrivacyAnalytics.slnx --no-build --verbosity normal --filter "FullyQualifiedName~PrivacyAnalytics.IntegrationTests"
