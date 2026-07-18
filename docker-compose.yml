@@ -13,7 +13,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -35,7 +35,7 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsu $$RABBITMQ_DEFAULT_USER:$$RABBITMQ_DEFAULT_PASS http://localhost:15672/api/health/checks/alarms >/dev/null"]
+      test: ["CMD-SHELL", "curl -fsu ${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS} http://localhost:15672/api/health/checks/alarms >/dev/null"]
       interval: 10s
       timeout: 10s
       retries: 5

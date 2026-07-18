@@ -20,18 +20,13 @@ jobs:
         
     - name: Start Services (TimescaleDB+hll and RabbitMQ)
       run: |
-        docker compose up -d postgres-timescale rabbitmq
+        docker compose up -d --wait postgres-timescale rabbitmq
       env:
         POSTGRES_USER: analytics
         POSTGRES_PASSWORD: analytics_dev
         POSTGRES_DB: analytics
         RABBITMQ_DEFAULT_USER: analytics
         RABBITMQ_DEFAULT_PASS: analytics_dev
-
-    - name: Wait for Services to be Healthy
-      run: |
-        timeout 60 bash -c 'until docker inspect --format="{{json .State.Health.Status}}" analytics-postgres | grep -q "\"healthy\""; do sleep 1; done'
-        timeout 60 bash -c 'until docker inspect --format="{{json .State.Health.Status}}" analytics-rabbitmq | grep -q "\"healthy\""; do sleep 1; done'
 
     - name: Restore dependencies
       run: dotnet restore backend/PrivacyAnalytics.slnx
