@@ -4,10 +4,16 @@ namespace PrivacyAnalytics.Contracts;
 
 /// <summary>
 /// Integration event published to RabbitMQ when an analytics event is received and hashed.
-/// This matches the domain AnalyticsEvent shape minus the database identifier and timestamp.
+/// This matches the domain AnalyticsEvent shape.
 /// </summary>
 public sealed class AnalyticsEventReceived
 {
+    [JsonPropertyName("eventId")]
+    public Guid EventId { get; set; }
+
+    [JsonPropertyName("timestamp")]
+    public DateTimeOffset Timestamp { get; set; }
+
     [JsonPropertyName("organizationId")]
     public Guid OrganizationId { get; set; }
 

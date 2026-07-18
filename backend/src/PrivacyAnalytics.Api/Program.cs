@@ -166,6 +166,8 @@ app.MapPost("/api/v1/track", async (
 
         var eventMessage = new AnalyticsEventReceived
         {
+            EventId = Guid.NewGuid(),
+            Timestamp = DateTimeOffset.UtcNow,
             OrganizationId = organizationId.Value,
             AnonymousDailyHash = hashes.AnonymousDailyHash,
             DurableHash = hashes.DurableHash,

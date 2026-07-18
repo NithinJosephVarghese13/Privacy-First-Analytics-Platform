@@ -19,6 +19,10 @@ public class Worker : BackgroundService
     private const string ExchangeName = "analytics.events";
     private const string QueueName = "analytics.events.queue";
     private const string RoutingKey = "event.received";
+
+    private const string DlxExchangeName = "analytics.events.dlx";
+    private const string DlqQueueName = "analytics.events.dlq";
+
     private const int BatchSize = 500;
     private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(3);
 
@@ -55,12 +59,40 @@ public class Worker : BackgroundService
             durable: true,
             cancellationToken: stoppingToken);
 
+        await channel.ExchangeDeclareAsync(
+            exchange: DlxExchangeName,
+            type: ExchangeType.Direct,
+            durable: true,
+            cancellationToken: stoppingToken);
+
+        await channel.QueueDeclareAsync(
+            queue: DlqQueueName,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            arguments: new Dictionary<string, object?>
+            {
+                { "x-queue-type", "quorum" }
+            },
+            cancellationToken: stoppingToken);
+
+        await channel.QueueBindAsync(
+            queue: DlqQueueName,
+            exchange: DlxExchangeName,
+            routingKey: "", // Direct exchange, route all dead-lettered messages here
+            cancellationToken: stoppingToken);
+
         await channel.QueueDeclareAsync(
             queue: QueueName,
             durable: true,
             exclusive: false,
             autoDelete: false,
-            arguments: null,
+            arguments: new Dictionary<string, object?>
+            {
+                { "x-queue-type", "quorum" },
+                { "x-dead-letter-exchange", DlxExchangeName },
+                { "x-delivery-limit", 5 }
+            },
             cancellationToken: stoppingToken);
 
         await channel.QueueBindAsync(
@@ -138,14 +170,14 @@ public class Worker : BackgroundService
 
                     var entity = new AnalyticsEvent
                     {
-                        EventId = Guid.NewGuid(),
+                        EventId = message.EventId,
                         OrganizationId = message.OrganizationId,
                         AnonymousDailyHash = message.AnonymousDailyHash,
                         DurableHash = message.DurableHash,
                         IsAuthenticated = message.IsAuthenticated,
                         EventType = message.EventType ?? string.Empty,
                         Path = message.Path ?? string.Empty,
-                        Timestamp = DateTimeOffset.UtcNow
+                        Timestamp = message.Timestamp
                     };
 
                     if (!eventsByTenant.TryGetValue(entity.OrganizationId, out var tenantEvents))
@@ -185,8 +217,29 @@ public class Worker : BackgroundService
                     var rlsSql = $"SET LOCAL app.current_tenant_id = '{organizationId}'";
                     await dbContext.Database.ExecuteSqlRawAsync(rlsSql, stoppingToken);
 
-                    dbContext.AnalyticsEvents.AddRange(events);
-                    await dbContext.SaveChangesAsync(stoppingToken);
+                    // Idempotent batch insert using raw SQL (EF Core equivalent for ON CONFLICT DO NOTHING)
+                    if (events.Count > 0)
+                    {
+                        var sqlBuilder = new StringBuilder();
+                        sqlBuilder.Append("INSERT INTO analytics_events (event_id, timestamp, organization_id, anonymous_daily_hash, durable_hash, is_authenticated, event_type, path) VALUES ");
+                        var parameters = new List<object>();
+                        for (int i = 0; i < events.Count; i++)
+                        {
+                            var e = events[i];
+                            sqlBuilder.Append($"({{{i * 8 + 0}}}, {{{i * 8 + 1}}}, {{{i * 8 + 2}}}, {{{i * 8 + 3}}}, {{{i * 8 + 4}}}, {{{i * 8 + 5}}}, {{{i * 8 + 6}}}, {{{i * 8 + 7}}})");
+                            if (i < events.Count - 1) sqlBuilder.Append(", ");
+                            parameters.Add(e.EventId);
+                            parameters.Add(e.Timestamp);
+                            parameters.Add(e.OrganizationId);
+                            parameters.Add(e.AnonymousDailyHash);
+                            parameters.Add(e.DurableHash);
+                            parameters.Add(e.IsAuthenticated);
+                            parameters.Add(e.EventType);
+                            parameters.Add(e.Path);
+                        }
+                        sqlBuilder.Append(" ON CONFLICT (event_id, timestamp) DO NOTHING;");
+                        await dbContext.Database.ExecuteSqlRawAsync(sqlBuilder.ToString(), parameters.ToArray(), stoppingToken);
+                    }
                     
                     await transaction.CommitAsync(stoppingToken);
                     dbContext.ChangeTracker.Clear();
@@ -197,11 +250,17 @@ public class Worker : BackgroundService
             await channel.BasicAckAsync(maxDeliveryTag, multiple: true, cancellationToken: stoppingToken);
             _logger.LogInformation("Processed and acked {Count} events.", batch.Count);
         }
+        catch (DbUpdateException dbEx)
+        {
+            _logger.LogError(dbEx, "Database constraint violation or permanent failure. Nacking {Count} messages without requeue (to DLX).", batch.Count);
+            // Permanent failure (e.g. constraint violation). Nack without requeue to dead-letter immediately.
+            await channel.BasicNackAsync(maxDeliveryTag, multiple: true, requeue: false, cancellationToken: stoppingToken);
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to process batch. Nacking {Count} messages.", batch.Count);
+            _logger.LogError(ex, "Failed to process batch. Nacking {Count} messages. (Quorum queue delivery-limit will dead-letter after 5 attempts)", batch.Count);
             
-            // Nack and requeue on failure as required by spec (Warning: could cause poison message loop)
+            // Transient failure. Requeue. Once x-delivery-limit (5) is reached, RabbitMQ will route to DLX.
             await channel.BasicNackAsync(maxDeliveryTag, multiple: true, requeue: true, cancellationToken: stoppingToken);
         }
     }
