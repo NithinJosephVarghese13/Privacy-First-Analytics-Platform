@@ -29,18 +29,29 @@ jobs:
         RABBITMQ_DEFAULT_PASS: analytics_dev
 
     - name: Diagnose RabbitMQ Healthcheck Failure
-      if: failure()
+      if: ${{ failure() }}
       run: |
-        echo "=== docker compose ps ==="
-        docker compose ps
-        echo "=== docker ps -a ==="
+        echo "=== Docker Compose Status ==="
+        docker compose ps -a
+
+        echo "=== All Docker Containers ==="
         docker ps -a
-        echo "=== docker logs analytics-rabbitmq ==="
+
+        echo "=== RabbitMQ Container Logs ==="
         docker logs analytics-rabbitmq || true
-        echo "=== docker inspect analytics-rabbitmq ==="
-        docker inspect analytics-rabbitmq || true
-        echo "=== healthcheck state ==="
-        docker inspect --format='{{json .State.Health}}' analytics-rabbitmq || true
+
+        echo "=== RabbitMQ Health State ==="
+        docker inspect analytics-rabbitmq \
+          --format '{{json .State.Health}}' || true
+
+        echo "=== RabbitMQ Healthcheck Log ==="
+        docker inspect analytics-rabbitmq \
+          --format '{{range .State.Health.Log}}{{println "ExitCode:" .ExitCode}}{{println "Output:" .Output}}{{end}}' || true
+
+        echo "=== RabbitMQ Configured Healthcheck ==="
+        docker inspect analytics-rabbitmq \
+          --format '{{json .Config.Healthcheck}}' || true
+
         echo "=== manual healthcheck execution inside container ==="
         docker exec analytics-rabbitmq curl -v -fsu analytics:analytics_dev http://127.0.0.1:15672/api/health/checks/alarms || true
 
