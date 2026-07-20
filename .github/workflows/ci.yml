@@ -28,6 +28,22 @@ jobs:
         RABBITMQ_DEFAULT_USER: analytics
         RABBITMQ_DEFAULT_PASS: analytics_dev
 
+    - name: Diagnose RabbitMQ Healthcheck Failure
+      if: failure()
+      run: |
+        echo "=== docker compose ps ==="
+        docker compose ps
+        echo "=== docker ps -a ==="
+        docker ps -a
+        echo "=== docker logs analytics-rabbitmq ==="
+        docker logs analytics-rabbitmq || true
+        echo "=== docker inspect analytics-rabbitmq ==="
+        docker inspect analytics-rabbitmq || true
+        echo "=== healthcheck state ==="
+        docker inspect --format='{{json .State.Health}}' analytics-rabbitmq || true
+        echo "=== manual healthcheck execution inside container ==="
+        docker exec analytics-rabbitmq curl -v -fsu analytics:analytics_dev http://127.0.0.1:15672/api/health/checks/alarms || true
+
     - name: Restore dependencies
       run: dotnet restore backend/PrivacyAnalytics.slnx
 
