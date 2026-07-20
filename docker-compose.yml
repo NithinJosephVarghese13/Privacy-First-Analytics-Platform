@@ -21,7 +21,6 @@ services:
     restart: unless-stopped
 
   rabbitmq:
-    image: rabbitmq:4-management
     container_name: analytics-rabbitmq
     build: 
       context: .
