@@ -13,7 +13,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -23,9 +23,6 @@ services:
   rabbitmq:
     image: rabbitmq:4-management
     container_name: analytics-rabbitmq
-    build: 
-      context: .
-      dockerfile: docker/Dockerfile.rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
@@ -35,11 +32,11 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsu $$RABBITMQ_DEFAULT_USER:$$RABBITMQ_DEFAULT_PASS http://localhost:15672/api/health/checks/alarms >/dev/null"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 10s
-      retries: 5
-      start_period: 15s
+      retries: 10
+      start_period: 30s
     restart: unless-stopped
 
   keycloak:

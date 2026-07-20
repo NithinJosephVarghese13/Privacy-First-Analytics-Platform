@@ -20,7 +20,7 @@ jobs:
         
     - name: Start Services (TimescaleDB+hll and RabbitMQ)
       run: |
-        docker compose up -d postgres-timescale rabbitmq
+        docker compose up -d --wait postgres-timescale rabbitmq
       env:
         POSTGRES_USER: analytics
         POSTGRES_PASSWORD: analytics_dev
@@ -28,10 +28,32 @@ jobs:
         RABBITMQ_DEFAULT_USER: analytics
         RABBITMQ_DEFAULT_PASS: analytics_dev
 
-    - name: Wait for Services to be Healthy
+    - name: Diagnose RabbitMQ Healthcheck Failure
+      if: ${{ failure() }}
       run: |
-        timeout 60 bash -c 'until docker inspect --format="{{json .State.Health.Status}}" analytics-postgres | grep -q "\"healthy\""; do sleep 1; done'
-        timeout 60 bash -c 'until docker inspect --format="{{json .State.Health.Status}}" analytics-rabbitmq | grep -q "\"healthy\""; do sleep 1; done'
+        echo "=== Docker Compose Status ==="
+        docker compose ps -a
+
+        echo "=== All Docker Containers ==="
+        docker ps -a
+
+        echo "=== RabbitMQ Container Logs ==="
+        docker logs analytics-rabbitmq || true
+
+        echo "=== RabbitMQ Health State ==="
+        docker inspect analytics-rabbitmq \
+          --format '{{json .State.Health}}' || true
+
+        echo "=== RabbitMQ Healthcheck Log ==="
+        docker inspect analytics-rabbitmq \
+          --format '{{range .State.Health.Log}}{{println "ExitCode:" .ExitCode}}{{println "Output:" .Output}}{{end}}' || true
+
+        echo "=== RabbitMQ Configured Healthcheck ==="
+        docker inspect analytics-rabbitmq \
+          --format '{{json .Config.Healthcheck}}' || true
+
+        echo "=== manual healthcheck execution inside container ==="
+        docker exec analytics-rabbitmq curl -v -fsu analytics:analytics_dev http://127.0.0.1:15672/api/health/checks/alarms || true
 
     - name: Restore dependencies
       run: dotnet restore backend/PrivacyAnalytics.slnx

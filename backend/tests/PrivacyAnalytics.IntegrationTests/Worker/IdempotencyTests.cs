@@ -117,8 +117,8 @@ public class IdempotencyTests
                 parameters.Add(e.EventId);
                 parameters.Add(e.Timestamp);
                 parameters.Add(e.OrganizationId);
-                parameters.Add(e.AnonymousDailyHash);
-                parameters.Add(e.DurableHash);
+                parameters.Add(e.AnonymousDailyHash!);
+                parameters.Add(e.DurableHash!);
                 parameters.Add(e.IsAuthenticated);
                 parameters.Add(e.EventType);
                 parameters.Add(e.Path);
