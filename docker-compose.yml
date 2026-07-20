@@ -21,10 +21,8 @@ services:
     restart: unless-stopped
 
   rabbitmq:
+    image: rabbitmq:4-management
     container_name: analytics-rabbitmq
-    build: 
-      context: .
-      dockerfile: docker/Dockerfile.rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
@@ -34,7 +32,7 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsu ${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS} http://127.0.0.1:15672/api/health/checks/alarms >/dev/null"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 10s
       retries: 10
