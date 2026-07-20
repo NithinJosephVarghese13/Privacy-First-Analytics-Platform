@@ -108,7 +108,7 @@ public class IdempotencyTests
         {
             var sqlBuilder = new StringBuilder();
             sqlBuilder.Append("INSERT INTO analytics_events (event_id, timestamp, organization_id, anonymous_daily_hash, durable_hash, is_authenticated, event_type, path) VALUES ");
-            var parameters = new List<object>();
+            var parameters = new List<object?>();
             for (int i = 0; i < events.Count; i++)
             {
                 var e = events[i];
@@ -124,7 +124,7 @@ public class IdempotencyTests
                 parameters.Add(e.Path);
             }
             sqlBuilder.Append(" ON CONFLICT (event_id, timestamp) DO NOTHING;");
-            await dbContext.Database.ExecuteSqlRawAsync(sqlBuilder.ToString(), parameters.ToArray());
+            await dbContext.Database.ExecuteSqlRawAsync(sqlBuilder.ToString(), parameters.Cast<object>().ToArray());
         }
         
         await transaction.CommitAsync();

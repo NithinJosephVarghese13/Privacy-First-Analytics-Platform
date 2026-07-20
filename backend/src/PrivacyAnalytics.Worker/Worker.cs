@@ -222,7 +222,7 @@ public class Worker : BackgroundService
                     {
                         var sqlBuilder = new StringBuilder();
                         sqlBuilder.Append("INSERT INTO analytics_events (event_id, timestamp, organization_id, anonymous_daily_hash, durable_hash, is_authenticated, event_type, path) VALUES ");
-                        var parameters = new List<object>();
+                        var parameters = new List<object?>();
                         for (int i = 0; i < events.Count; i++)
                         {
                             var e = events[i];
@@ -238,7 +238,7 @@ public class Worker : BackgroundService
                             parameters.Add(e.Path);
                         }
                         sqlBuilder.Append(" ON CONFLICT (event_id, timestamp) DO NOTHING;");
-                        await dbContext.Database.ExecuteSqlRawAsync(sqlBuilder.ToString(), parameters.ToArray(), stoppingToken);
+                        await dbContext.Database.ExecuteSqlRawAsync(sqlBuilder.ToString(), parameters.Cast<object>().ToArray(), stoppingToken);
                     }
                     
                     await transaction.CommitAsync(stoppingToken);
