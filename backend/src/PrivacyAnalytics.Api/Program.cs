@@ -36,6 +36,16 @@ builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
 builder.Services.AddDbContext<AnalyticsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("AnalyticsDb")));
 
@@ -94,6 +104,8 @@ var app = builder.Build();
 // unconditional regardless of throttling decisions.
 app.UseMiddleware<UrlScrubbingMiddleware>();
 app.UseRateLimiter();
+
+app.UseCors("AllowFrontend");
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -182,6 +194,35 @@ app.MapPost("/api/v1/track", async (
         return Results.Accepted();
     })
     .RequireRateLimiting("TenantOrigin");
+
+var analyticsGroup = app.MapGroup("/api/v1/analytics")
+    .RequireAuthorization();
+
+analyticsGroup.MapGet("/visitors", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] DateTime? startDate,
+    [Microsoft.AspNetCore.Mvc.FromQuery] DateTime? endDate,
+    MediatR.IMediator mediator,
+    CancellationToken cancellationToken) =>
+{
+    var start = startDate ?? DateTime.UtcNow.AddDays(-30);
+    var end = endDate ?? DateTime.UtcNow;
+    var query = new PrivacyAnalytics.Infrastructure.Analytics.Queries.GetUniqueVisitorsQuery(start, end);
+    var result = await mediator.Send(query, cancellationToken);
+    return Results.Ok(result);
+});
+
+analyticsGroup.MapGet("/pageviews", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] DateTime? startDate,
+    [Microsoft.AspNetCore.Mvc.FromQuery] DateTime? endDate,
+    MediatR.IMediator mediator,
+    CancellationToken cancellationToken) =>
+{
+    var start = startDate ?? DateTime.UtcNow.AddDays(-30);
+    var end = endDate ?? DateTime.UtcNow;
+    var query = new PrivacyAnalytics.Infrastructure.Analytics.Queries.GetPageviewsOverTimeQuery(start, end);
+    var result = await mediator.Send(query, cancellationToken);
+    return Results.Ok(result);
+});
 
 // Extracts the client IP preferring the first hop of X-Forwarded-For (set by the trusted edge
 // proxy) and falling back to the direct remote IP. Only the first forwarded hop is trusted; a

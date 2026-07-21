@@ -1,27 +1,75 @@
 import { AreaChart, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Area } from 'recharts';
-import { Bot, Sparkles, Users, UserCheck, ArrowUpRight, Shield } from 'lucide-react';
-import { useState } from 'react';
+import { Bot, Sparkles, Users, UserCheck, Shield, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useAuth } from '../../auth/KeycloakProvider';
 
-const MOCK_DATA = [
-  { name: 'Mon', known: 4000, estimated: 6400 },
-  { name: 'Tue', known: 3000, estimated: 5398 },
-  { name: 'Wed', known: 2000, estimated: 9800 },
-  { name: 'Thu', known: 2780, estimated: 3908 },
-  { name: 'Fri', known: 1890, estimated: 4800 },
-  { name: 'Sat', known: 2390, estimated: 3800 },
-  { name: 'Sun', known: 3490, estimated: 4300 },
-];
+interface VisitorsData {
+  exactTier2Uniques: number;
+  estimatedTier1Uniques: number;
+}
+
+interface PageviewData {
+  date: string;
+  pageviews: number;
+}
 
 export default function DashboardPage() {
   const [query, setQuery] = useState('');
+  const { token } = useAuth();
+  
+  const [visitors, setVisitors] = useState<VisitorsData>({ exactTier2Uniques: 0, estimatedTier1Uniques: 0 });
+  const [pageviews, setPageviews] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!token) return;
+
+    let active = true;
+
+    async function fetchData() {
+      try {
+        const headers = { Authorization: `Bearer ${token}` };
+        
+        const [visitorsRes, pageviewsRes] = await Promise.all([
+          fetch('http://localhost:5115/api/v1/analytics/visitors', { headers }),
+          fetch('http://localhost:5115/api/v1/analytics/pageviews', { headers })
+        ]);
+
+        if (visitorsRes.ok && pageviewsRes.ok && active) {
+          const vData = await visitorsRes.json();
+          const pData = await pageviewsRes.json();
+
+          // Format dates for display
+          const formattedPageviews = pData.map((p: PageviewData) => ({
+            name: new Date(p.date).toLocaleDateString('en-US', { weekday: 'short' }),
+            pageviews: p.pageviews
+          }));
+
+          setVisitors(vData);
+          setPageviews(formattedPageviews.length > 0 ? formattedPageviews : []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch analytics data', error);
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    }
+
+    fetchData();
+
+    return () => { active = false; };
+  }, [token]);
 
   return (
     <div className="p-8 max-w-7xl mx-auto flex gap-8 h-full">
       {/* Left Column: Metrics and Charts */}
       <div className="flex-1 flex flex-col gap-6">
-        <header className="mb-2">
-          <h1 className="text-3xl font-bold tracking-tight text-white">Overview</h1>
-          <p className="text-zinc-400 mt-1">Real-time privacy-first web traffic analysis.</p>
+        <header className="mb-2 flex justify-between items-end">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-white">Overview</h1>
+            <p className="text-zinc-400 mt-1">Real-time privacy-first web traffic analysis.</p>
+          </div>
+          {isLoading && <Loader2 className="w-5 h-5 text-zinc-500 animate-spin" />}
         </header>
 
         {/* Metric Cards */}
@@ -35,10 +83,8 @@ export default function DashboardPage() {
               <span className="text-sm font-medium">Known Unique Visitors</span>
             </div>
             <div className="flex items-baseline gap-2 mt-4">
-              <span className="text-4xl font-bold tracking-tighter text-white">12,405</span>
-              <span className="text-sm font-medium text-emerald-500 flex items-center">
-                <ArrowUpRight className="w-3 h-3 mr-1" />
-                12%
+              <span className="text-4xl font-bold tracking-tighter text-white">
+                {visitors.exactTier2Uniques.toLocaleString()}
               </span>
             </div>
             <p className="text-xs text-zinc-500 mt-2">Tier 2 exactly matched</p>
@@ -53,10 +99,8 @@ export default function DashboardPage() {
               <span className="text-sm font-medium">Estimated Anonymous Visitors</span>
             </div>
             <div className="flex items-baseline gap-2 mt-4">
-              <span className="text-4xl font-bold tracking-tighter text-white">38,409</span>
-              <span className="text-sm font-medium text-blue-400 flex items-center">
-                <ArrowUpRight className="w-3 h-3 mr-1" />
-                8%
+              <span className="text-4xl font-bold tracking-tighter text-white">
+                {visitors.estimatedTier1Uniques.toLocaleString()}
               </span>
             </div>
             <p className="text-xs text-zinc-500 mt-2">Tier 1 HLL upper-bound (Approximate)</p>
@@ -65,28 +109,23 @@ export default function DashboardPage() {
 
         {/* Chart */}
         <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5 backdrop-blur-sm flex-1 min-h-[300px]">
-          <h3 className="text-sm font-medium text-zinc-400 mb-6">Traffic Over Time</h3>
+          <h3 className="text-sm font-medium text-zinc-400 mb-6">Pageviews Over Time</h3>
           <ResponsiveContainer width="100%" height="90%">
-            <AreaChart data={MOCK_DATA} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <AreaChart data={pageviews} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
               <defs>
-                <linearGradient id="colorKnown" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                </linearGradient>
-                <linearGradient id="colorEst" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                <linearGradient id="colorPageviews" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
               <XAxis dataKey="name" stroke="#52525b" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="#52525b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value / 1000}k`} />
+              <YAxis stroke="#52525b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => value >= 1000 ? `${value / 1000}k` : value} />
               <RechartsTooltip 
                 contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px', color: '#e4e4e7' }}
                 itemStyle={{ color: '#e4e4e7' }}
               />
-              <Area type="monotone" dataKey="estimated" name="Estimated Anonymous" stroke="#3b82f6" fillOpacity={1} fill="url(#colorEst)" strokeWidth={2} />
-              <Area type="monotone" dataKey="known" name="Known Unique" stroke="#10b981" fillOpacity={1} fill="url(#colorKnown)" strokeWidth={2} />
+              <Area type="monotone" dataKey="pageviews" name="Pageviews" stroke="#8b5cf6" fillOpacity={1} fill="url(#colorPageviews)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
