@@ -10,6 +10,7 @@ using Xunit;
 
 namespace PrivacyAnalytics.IntegrationTests.Worker;
 
+[Collection("RlsTests")]
 public class IdempotencyTests
 {
     [PostgresRequiredFact]

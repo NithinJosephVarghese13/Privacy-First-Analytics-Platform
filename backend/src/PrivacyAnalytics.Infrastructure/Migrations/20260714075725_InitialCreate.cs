@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -98,6 +98,10 @@ namespace PrivacyAnalytics.Infrastructure.Migrations
                 CREATE POLICY tenant_isolation_insert ON analytics_events
                     FOR INSERT
                     WITH CHECK (organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
+
+                CREATE POLICY tenant_isolation_delete ON analytics_events
+                    FOR DELETE
+                    USING (organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
 
                 -- Apply the same fail-closed isolation to the insert-only erasure audit log.
                 ALTER TABLE erasure_audit_log ENABLE ROW LEVEL SECURITY;

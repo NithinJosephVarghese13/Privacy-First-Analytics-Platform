@@ -224,6 +224,26 @@ analyticsGroup.MapGet("/pageviews", async (
     return Results.Ok(result);
 });
 
+analyticsGroup.MapPost("/erasure", async (
+    PurgeDataRequest request,
+    HttpContext httpContext,
+    MediatR.IMediator mediator,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.DurableHash))
+    {
+        return Results.BadRequest(new { Error = "DurableHash is required." });
+    }
+
+    var requestedBy = httpContext.User.FindFirst("preferred_username")?.Value 
+                   ?? httpContext.User.FindFirst("sub")?.Value 
+                   ?? "Admin";
+
+    var command = new PrivacyAnalytics.Infrastructure.Analytics.Commands.PurgeTier2DataCommand(request.DurableHash, requestedBy);
+    var result = await mediator.Send(command, cancellationToken);
+    return Results.Ok(result);
+});
+
 // Extracts the client IP preferring the first hop of X-Forwarded-For (set by the trusted edge
 // proxy) and falling back to the direct remote IP. Only the first forwarded hop is trusted; a
 // production deployment should pin this to a known proxy and validate the header chain.

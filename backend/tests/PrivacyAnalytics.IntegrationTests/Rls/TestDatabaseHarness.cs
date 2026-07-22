@@ -118,9 +118,11 @@ internal sealed class TestDatabaseHarness : IAsyncDisposable
             await g.ExecuteAsync($"ALTER TABLE analytics_events OWNER TO {quotedRole};");
             await g.ExecuteAsync($"ALTER TABLE erasure_audit_log OWNER TO {quotedRole};");
             await g.ExecuteAsync($"ALTER TABLE organizations OWNER TO {quotedRole};");
-            await g.ExecuteAsync($"ALTER SCHEMA public OWNER TO {quotedRole};");
-            // Ensure future chunks (owned by the hypertable owner) are readable by the owner.
             await g.ExecuteAsync($"GRANT USAGE ON SCHEMA public TO {quotedRole};");
+            await g.ExecuteAsync($"GRANT ALL ON ALL TABLES IN SCHEMA public TO {quotedRole};");
+            await g.ExecuteAsync($"GRANT USAGE ON SCHEMA _timescaledb_internal TO {quotedRole};");
+            await g.ExecuteAsync($"GRANT ALL ON ALL TABLES IN SCHEMA _timescaledb_internal TO {quotedRole};");
+            await g.ExecuteAsync($"ALTER DEFAULT PRIVILEGES IN SCHEMA _timescaledb_internal GRANT ALL ON TABLES TO {quotedRole};");
         }
 
         return new TestDatabaseHarness(

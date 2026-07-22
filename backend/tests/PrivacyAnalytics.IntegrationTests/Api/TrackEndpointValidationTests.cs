@@ -12,6 +12,7 @@ using PrivacyAnalytics.Contracts;
 
 namespace PrivacyAnalytics.IntegrationTests.Api;
 
+[Collection("RlsTests")]
 public class TrackEndpointValidationTests : IAsyncLifetime
 {
     private TestDatabaseHarness _harness = null!;
