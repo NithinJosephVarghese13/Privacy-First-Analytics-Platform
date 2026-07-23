@@ -60,7 +60,7 @@ services:
     volumes:
       - ./docker/keycloak/analytics-realm-export.json:/opt/keycloak/data/import/analytics-realm-export.json
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost:9000; printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3; grep -q 'UP' <&3 || { exec 3>&-; exit 1; }; exec 3>&-"]
+      test: ["CMD", "/bin/bash", "-c", "exec 3<>/dev/tcp/localhost/9000; printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; grep -q 'UP' <&3 || { exec 3>&-; exit 1; }; exec 3>&-"]
       interval: 10s
       timeout: 10s
       retries: 8
@@ -81,6 +81,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      keycloak:
+        condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       Authentication__Authority: "http://keycloak:8080/realms/analytics-platform"
@@ -91,9 +93,27 @@ services:
     ports:
       - "5115:8080"
     secrets:
-      # Docker mounts each named secret as a regular file at /run/secrets/<name>. The app reads
-      # the bytes at startup via DockerSecretReader. Generate these files first:
-      #   ./docker/secrets/generate-secrets.sh
+      - analytics_daily_salt_seed
+      - analytics_durable_hmac_key
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: analytics-worker
+    depends_on:
+      postgres-timescale:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__AnalyticsDb: "Host=postgres-timescale;Port=5432;Database=analytics;Username=analytics_app;Password=analytics_dev"
+      ConnectionStrings__RabbitMQ: "amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/"
+      Identity__SecretsPath: "/run/secrets"
+      Identity__AllowUnmanagedDevSecrets: "false"
+    secrets:
       - analytics_daily_salt_seed
       - analytics_durable_hmac_key
     restart: unless-stopped

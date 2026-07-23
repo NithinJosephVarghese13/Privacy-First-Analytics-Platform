@@ -15,5 +15,5 @@ RUN git clone https://github.com/citusdata/postgresql-hll.git /tmp/postgresql-hl
     make install && \
     rm -rf /tmp/postgresql-hll
 
-# Initialize required extensions automatically on first startup
-COPY docker/init-db/01-extensions.sql /docker-entrypoint-initdb.d/
+# Initialize required extensions, schema, RLS policies and seed data automatically on first startup
+COPY docker/init-db/ /docker-entrypoint-initdb.d/
