@@ -83,9 +83,8 @@ services:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      # Connection-string only — NO secret material here. The signing key comes from the secret
-      # mount below; putting it in an env var would defeat the out-of-band guarantee.
-      ConnectionStrings__AnalyticsDb: "Host=postgres-timescale;Port=5432;Database=analytics;Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      Authentication__Authority: "http://keycloak:8080/realms/analytics-platform"
+      ConnectionStrings__AnalyticsDb: "Host=postgres-timescale;Port=5432;Database=analytics;Username=analytics_app;Password=analytics_dev"
       ConnectionStrings__RabbitMQ: "amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/"
       Identity__SecretsPath: "/run/secrets"
       Identity__AllowUnmanagedDevSecrets: "false"

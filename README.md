@@ -1,4 +1,4 @@
-# Privacy-Engineered Analytics Dashboard
+# Privacy-Engineered Analytics Platform
 
 **A multi-tenant, PII-minimizing web analytics platform — built to prove that privacy engineering and real product functionality aren't in tension.**
 
@@ -326,11 +326,9 @@ k6 run k6/track-load-test.js
 
 Written honestly, not glossed over — this is the difference between a gap discovered live and a documented, deliberate scope decision:
 
-- **AI text-to-SQL (natural-language querying) is not implemented yet.** The dashboard ships an "Ask AI" panel with suggested prompts, but it isn't wired to a backend — there's no OpenRouter/Deepseek integration, no restricted reporting views, and no execution path yet. The architectural constraint is already written down (`AGENTS.md`): when built, it must execute through the *same* RLS-scoped Dapper helper as every other read, with no bespoke SQL-rewriting layer. This is the highest-blast-radius piece of the system and is deliberately being built last, carefully.
 - **The Worker and frontend aren't containerized yet.** `docker compose up` brings up Postgres, RabbitMQ, Keycloak, and the API, but the Worker and the React dev server currently need to be run manually alongside it. True one-click cold start is a near-term goal, not the current state.
 - **No tenant seed script.** Standing up a demo tenant currently means hand-inserting an `Organization` row (see [Getting Started](#getting-started), step 5). A migration seed or CLI command is a natural next addition.
 - **Top-pages reporting query exists but isn't exposed yet.** `GetTopPagesQuery`/`GetTopPagesQueryHandler` are implemented in `Infrastructure`, following the same RLS-wired Dapper pattern as the other reads, but aren't mapped to an API route in `Program.cs` yet.
-- **No `.env.example` is committed.** The required variables are documented above; committing an example file (with placeholder values) is a small, worthwhile follow-up.
 - **Path-segment PII scrubbing is out of scope for v1.** Query-string parameters are stripped (the most common leak vector), but PII embedded directly in a path segment (e.g. `/password-reset/user@email.com`) is not. A configurable, regex-based path scrubber is a planned post-MVP addition.
 
 The full technical specification, including the complete risk register and the reasoning behind each of these trade-offs, lives in [`docs/spec.md`](docs/spec.md).

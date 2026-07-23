@@ -21,14 +21,18 @@ JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        var authority = builder.Configuration["Authentication:Authority"] ?? "http://localhost:8080/realms/analytics-platform";
+        var authority = builder.Configuration["Authentication:Authority"] ?? "http://keycloak:8080/realms/analytics-platform";
         options.Authority = authority;
         options.RequireHttpsMetadata = false; // Internal Docker / local dev network
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateAudience = false, // Not validating audience for internal tokens in this MVP
             ValidateIssuer = true,
-            ValidIssuer = authority
+            ValidIssuers = new[]
+            {
+                "http://localhost:8080/realms/analytics-platform",
+                "http://keycloak:8080/realms/analytics-platform"
+            }
         };
     });
 builder.Services.AddAuthorization();
