@@ -52,6 +52,9 @@ builder.Services.AddDbContext<AnalyticsDbContext>(options =>
 builder.Services.AddScoped<IDapperQueryHelper, DapperQueryHelper>();
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(PrivacyAnalytics.Infrastructure.Analytics.Queries.GetPageviewsOverTimeQueryHandler).Assembly));
 
+builder.Services.AddSingleton<PrivacyAnalytics.Infrastructure.Ai.ISqlShapeValidator, PrivacyAnalytics.Infrastructure.Ai.SqlShapeValidator>();
+builder.Services.AddHttpClient<PrivacyAnalytics.Infrastructure.Ai.IAiTextToSqlService, PrivacyAnalytics.Infrastructure.Ai.OpenRouterTextToSqlService>();
+
 // Two-tier identity hashing (FR-2.1): daily-salt SHA-256 for anonymous traffic and a
 // tenant-scoped HMAC for authenticated, opted-in traffic. The HMAC signing key is read from a
 // Docker secret file — never appsettings, never an env var holding the literal value, never a DB
@@ -242,6 +245,28 @@ analyticsGroup.MapPost("/erasure", async (
     var command = new PrivacyAnalytics.Infrastructure.Analytics.Commands.PurgeTier2DataCommand(request.DurableHash, requestedBy);
     var result = await mediator.Send(command, cancellationToken);
     return Results.Ok(result);
+});
+
+analyticsGroup.MapPost("/ask-ai", async (
+    PrivacyAnalytics.Contracts.Analytics.AskAiRequest request,
+    MediatR.IMediator mediator,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Prompt))
+    {
+        return Results.BadRequest(new { Error = "Prompt cannot be empty." });
+    }
+
+    try
+    {
+        var query = new PrivacyAnalytics.Infrastructure.Analytics.Queries.AskAiQuery(request.Prompt, request.UseCache);
+        var result = await mediator.Send(query, cancellationToken);
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { Error = ex.Message });
+    }
 });
 
 // Extracts the client IP preferring the first hop of X-Forwarded-For (set by the trusted edge
