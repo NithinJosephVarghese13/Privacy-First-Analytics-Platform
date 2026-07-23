@@ -20,16 +20,32 @@ public class OpenRouterTextToSqlService : IAiTextToSqlService
     private static readonly Dictionary<string, string> PreValidatedDemoPrompts = new(StringComparer.OrdinalIgnoreCase)
     {
         {
+            "Top 5 pages by unique visitors this week",
+            "SELECT path, COUNT(DISTINCT event_id) AS total_visitors FROM reporting_analytics_events WHERE timestamp >= CURRENT_DATE - INTERVAL '7 days' GROUP BY path ORDER BY total_visitors DESC LIMIT 5;"
+        },
+        {
             "Show me the top 5 pages by unique visitors this week.",
             "SELECT path, COUNT(DISTINCT event_id) AS total_visitors FROM reporting_analytics_events WHERE timestamp >= CURRENT_DATE - INTERVAL '7 days' GROUP BY path ORDER BY total_visitors DESC LIMIT 5;"
+        },
+        {
+            "Daily pageviews for the past month",
+            "SELECT event_date, SUM(total_events) AS daily_views FROM reporting_daily_pageviews WHERE event_date >= CURRENT_DATE - INTERVAL '30 days' GROUP BY event_date ORDER BY event_date ASC;"
+        },
+        {
+            "Show daily pageview trends for the last 30 days.",
+            "SELECT event_date, SUM(total_events) AS daily_views FROM reporting_daily_pageviews WHERE event_date >= CURRENT_DATE - INTERVAL '30 days' GROUP BY event_date ORDER BY event_date ASC;"
+        },
+        {
+            "Known vs estimated unique visitors count",
+            "SELECT is_authenticated, COUNT(*) AS event_count FROM reporting_analytics_events GROUP BY is_authenticated;"
         },
         {
             "What are the total pageviews today?",
             "SELECT COUNT(*) AS total_pageviews FROM reporting_analytics_events WHERE timestamp >= CURRENT_DATE AND event_type = 'Pageview';"
         },
         {
-            "Show daily pageview trends for the last 30 days.",
-            "SELECT event_date, SUM(total_events) AS daily_views FROM reporting_daily_pageviews WHERE event_date >= CURRENT_DATE - INTERVAL '30 days' GROUP BY event_date ORDER BY event_date ASC;"
+            "Show top pages by total events",
+            "SELECT path, total_events FROM reporting_top_pages ORDER BY total_events DESC LIMIT 10;"
         },
         {
             "Show top pages by total events.",
