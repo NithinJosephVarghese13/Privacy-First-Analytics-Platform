@@ -1,0 +1,4 @@
+{
+  "url": "https://example.com/checkout/confirmation?email=alice@example.com&token=secret123",
+  "eventType": "pageview"
+}
