@@ -15,6 +15,7 @@ public class Worker : BackgroundService
     private readonly ILogger<Worker> _logger;
     private readonly IConfiguration _configuration;
     private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly WorkerHealthState _healthState;
 
     private const string ExchangeName = "analytics.events";
     private const string QueueName = "analytics.events.queue";
@@ -28,11 +29,12 @@ public class Worker : BackgroundService
 
     private record struct QueuedEvent(ulong DeliveryTag, byte[] Body);
 
-    public Worker(ILogger<Worker> logger, IConfiguration configuration, IServiceScopeFactory serviceScopeFactory)
+    public Worker(ILogger<Worker> logger, IConfiguration configuration, IServiceScopeFactory serviceScopeFactory, WorkerHealthState? healthState = null)
     {
         _logger = logger;
         _configuration = configuration;
         _serviceScopeFactory = serviceScopeFactory;
+        _healthState = healthState ?? new WorkerHealthState();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -52,6 +54,9 @@ public class Worker : BackgroundService
 
         using var connection = await factory.CreateConnectionAsync(stoppingToken);
         using var channel = await connection.CreateChannelAsync(cancellationToken: stoppingToken);
+
+        _healthState.Connection = connection;
+        _healthState.Channel = channel;
 
         await channel.ExchangeDeclareAsync(
             exchange: ExchangeName,

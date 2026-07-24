@@ -1,20 +1,35 @@
 using Microsoft.EntityFrameworkCore;
 using PrivacyAnalytics.Infrastructure.Identity;
 using PrivacyAnalytics.Worker;
-var builder = Host.CreateApplicationBuilder(args);
 
-// The worker consumes the ingestion queue and persists events, so it must source the SAME
-// durable-HMAC key and daily-salt seed out-of-band (Docker secrets) as the API — never from a DB
-// column or appsettings literal (FR-2.1).
-builder.Services.AddIdentityHashing(builder.Configuration);
-
-builder.Services.AddDbContext<PrivacyAnalytics.Infrastructure.Data.AnalyticsDbContext>(options =>
+public partial class WorkerProgram
 {
-    var connectionString = builder.Configuration.GetConnectionString("AnalyticsDb");
-    options.UseNpgsql(connectionString);
-});
+    public static void Main(string[] args)
+    {
+        var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddHostedService<Worker>();
+        // The worker consumes the ingestion queue and persists events, so it must source the SAME
+        // durable-HMAC key and daily-salt seed out-of-band (Docker secrets) as the API — never from a DB
+        // column or appsettings literal (FR-2.1).
+        builder.Services.AddIdentityHashing(builder.Configuration);
 
-var host = builder.Build();
-host.Run();
+        builder.Services.AddDbContext<PrivacyAnalytics.Infrastructure.Data.AnalyticsDbContext>(options =>
+        {
+            var connectionString = builder.Configuration.GetConnectionString("AnalyticsDb");
+            options.UseNpgsql(connectionString);
+        });
+
+        builder.Services.AddSingleton<WorkerHealthState>();
+        builder.Services.AddHealthChecks()
+            .AddDbContextCheck<PrivacyAnalytics.Infrastructure.Data.AnalyticsDbContext>("postgres")
+            .AddCheck<WorkerRabbitMqHealthCheck>("rabbitmq");
+
+        builder.Services.AddHostedService<Worker>();
+
+        var app = builder.Build();
+
+        app.MapHealthChecks("/health/ready").AllowAnonymous();
+
+        app.Run();
+    }
+}

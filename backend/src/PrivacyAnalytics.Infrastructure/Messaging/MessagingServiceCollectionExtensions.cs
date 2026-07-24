@@ -7,7 +7,8 @@ public static class MessagingServiceCollectionExtensions
 {
     public static IServiceCollection AddMessaging(this IServiceCollection services)
     {
-        services.AddSingleton<IMessagePublisher, RabbitMqPublisher>();
+        services.AddSingleton<RabbitMqPublisher>();
+        services.AddSingleton<IMessagePublisher>(sp => sp.GetRequiredService<RabbitMqPublisher>());
         return services;
     }
 }

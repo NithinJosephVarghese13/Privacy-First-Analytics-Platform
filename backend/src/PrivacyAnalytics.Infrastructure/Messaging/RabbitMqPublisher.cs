@@ -2,12 +2,13 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using PrivacyAnalytics.Domain.Messaging;
 using RabbitMQ.Client;
 
 namespace PrivacyAnalytics.Infrastructure.Messaging;
 
-public class RabbitMqPublisher : IMessagePublisher, IAsyncDisposable
+public class RabbitMqPublisher : IMessagePublisher, IHealthCheck, IAsyncDisposable
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<RabbitMqPublisher> _logger;
@@ -27,7 +28,7 @@ public class RabbitMqPublisher : IMessagePublisher, IAsyncDisposable
 
     private async Task EnsureConnectionAsync(CancellationToken cancellationToken)
     {
-        if (_channel is not null)
+        if (_channel is not null && _channel.IsOpen && _connection is not null && _connection.IsOpen)
         {
             return;
         }
@@ -35,7 +36,7 @@ public class RabbitMqPublisher : IMessagePublisher, IAsyncDisposable
         await _connectionLock.WaitAsync(cancellationToken);
         try
         {
-            if (_channel is not null)
+            if (_channel is not null && _channel.IsOpen && _connection is not null && _connection.IsOpen)
             {
                 return;
             }
@@ -129,18 +130,62 @@ public class RabbitMqPublisher : IMessagePublisher, IAsyncDisposable
         }
     }
 
+    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (_connection is null || _channel is null)
+            {
+                await EnsureConnectionAsync(cancellationToken);
+            }
+
+            if (_connection is not null && _connection.IsOpen && _channel is not null && _channel.IsOpen)
+            {
+                return HealthCheckResult.Healthy("RabbitMQ publisher connection and channel are open.");
+            }
+
+            return HealthCheckResult.Unhealthy("RabbitMQ publisher connection or channel is closed or uninitialized.");
+        }
+        catch (Exception ex)
+        {
+            return HealthCheckResult.Unhealthy("RabbitMQ publisher health check failed.", ex);
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_channel is not null)
         {
-            await _channel.CloseAsync();
-            await _channel.DisposeAsync();
+            try
+            {
+                if (_channel.IsOpen)
+                {
+                    await _channel.CloseAsync();
+                }
+                await _channel.DisposeAsync();
+            }
+            catch (ObjectDisposedException) {}
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error disposing RabbitMQ channel.");
+            }
         }
 
         if (_connection is not null)
         {
-            await _connection.CloseAsync();
-            await _connection.DisposeAsync();
+            try
+            {
+                if (_connection.IsOpen)
+                {
+                    await _connection.CloseAsync();
+                }
+                await _connection.DisposeAsync();
+            }
+            catch (ObjectDisposedException) {}
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error disposing RabbitMQ connection.");
+            }
         }
     }
 }

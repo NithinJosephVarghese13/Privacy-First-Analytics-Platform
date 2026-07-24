@@ -66,6 +66,10 @@ builder.Services.AddHttpClient<PrivacyAnalytics.Infrastructure.Ai.IAiTextToSqlSe
 builder.Services.AddIdentityHashing(builder.Configuration);
 builder.Services.AddMessaging();
 
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AnalyticsDbContext>("postgres")
+    .AddCheck<PrivacyAnalytics.Infrastructure.Messaging.RabbitMqPublisher>("rabbitmq");
+
 builder.Services.AddLogging();
 
 // Rate limiting: per-tenant token bucket, 100 req/sec per partition. The tenant identity is
@@ -290,6 +294,8 @@ static string? ResolveClientIp(HttpRequest request)
     }
     return request.HttpContext.Connection.RemoteIpAddress?.ToString();
 }
+
+app.MapHealthChecks("/health/ready").AllowAnonymous();
 
 app.Run();
 
