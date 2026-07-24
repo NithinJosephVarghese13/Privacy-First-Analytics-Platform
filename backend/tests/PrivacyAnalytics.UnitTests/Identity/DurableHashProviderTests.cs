@@ -17,7 +17,7 @@ public sealed class DurableHashProviderTests
     private static readonly Guid OrgB = Guid.Parse("00000000-0000-0000-0000-000000000002");
 
     private static readonly byte[] Key = Convert.FromHexString(
-        "f7fad8058975349527df75ebdf0a3a9a5f10657ac3cb13c8dbf9eda80f255d92");
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
 
     private static DurableHashProvider CreateProvider(byte[]? key, bool allowDevFallback = false)
     {

@@ -80,6 +80,8 @@ SELECT organization_id, path, event_type, COUNT(*) AS total_events FROM analytic
 
 -- Grants for analytics_app
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO analytics_app;
+-- Table-specific grant restriction: must be reapplied if erasure_audit_log is ever dropped or recreated.
+REVOKE UPDATE, DELETE ON erasure_audit_log FROM analytics_app;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO analytics_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO analytics_app;
 

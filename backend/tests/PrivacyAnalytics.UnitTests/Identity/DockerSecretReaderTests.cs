@@ -33,7 +33,7 @@ public sealed class DockerSecretReaderTests : IDisposable
     [Fact]
     public void ReadsHexSecret_AndTrimsTrailingNewline()
     {
-        var hex = "f7fad8058975349527df75ebdf0a3a9a5f10657ac3cb13c8dbf9eda80f255d92";
+        var hex = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         WriteSecret("analytics_durable_hmac_key", hex + "\n");
 
         var reader = new DockerSecretReader(Options(), NullLogger<DockerSecretReader>.Instance);

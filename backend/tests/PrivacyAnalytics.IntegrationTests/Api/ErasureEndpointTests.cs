@@ -189,30 +189,30 @@ public class ErasureEndpointTests
             Assert.Equal(2, auditRows[0].RecordsAffected);
         }
 
-        // 3. Attempt to UPDATE the audit row directly with the app's DB role -> confirm 0 rows affected (rejected by RLS insert-only policy)
+        // 3. Attempt to UPDATE the audit row directly with the app's DB role -> confirm permission denied error
         await using (var appConn = new NpgsqlConnection(harness.AppConnectionString))
         {
             await appConn.OpenAsync();
             await appConn.ExecuteAsync($"SET app.current_tenant_id = '{tenantId}';");
 
-            var updatedRows = await appConn.ExecuteAsync(
-                "UPDATE erasure_audit_log SET requested_by = 'hacker' WHERE organization_id = @TenantId",
-                new { TenantId = tenantId });
-
-            Assert.Equal(0, updatedRows);
+            var updateEx = await Assert.ThrowsAsync<PostgresException>(() =>
+                appConn.ExecuteAsync(
+                    "UPDATE erasure_audit_log SET requested_by = 'hacker' WHERE organization_id = @TenantId",
+                    new { TenantId = tenantId }));
+            Assert.Equal("42501", updateEx.SqlState);
         }
 
-        // 4. Attempt to DELETE the audit row directly with the app's DB role -> confirm 0 rows affected (rejected by RLS insert-only policy)
+        // 4. Attempt to DELETE the audit row directly with the app's DB role -> confirm permission denied error
         await using (var appConn = new NpgsqlConnection(harness.AppConnectionString))
         {
             await appConn.OpenAsync();
             await appConn.ExecuteAsync($"SET app.current_tenant_id = '{tenantId}';");
 
-            var deletedRows = await appConn.ExecuteAsync(
-                "DELETE FROM erasure_audit_log WHERE organization_id = @TenantId",
-                new { TenantId = tenantId });
-
-            Assert.Equal(0, deletedRows);
+            var deleteEx = await Assert.ThrowsAsync<PostgresException>(() =>
+                appConn.ExecuteAsync(
+                    "DELETE FROM erasure_audit_log WHERE organization_id = @TenantId",
+                    new { TenantId = tenantId }));
+            Assert.Equal("42501", deleteEx.SqlState);
         }
 
         // 5. Confirm EF Core DbContext explicitly rejects UPDATE and DELETE on ErasureAuditLog
